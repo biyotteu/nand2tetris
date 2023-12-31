@@ -32,46 +32,34 @@ CHIP CPU {
         pc[15];          // Address of next instruction
 
     PARTS:
-    Or16(a=instruction,b=false,out=test1234,out[15]=asdf);
-    Mux16(a=instruction,b=aluOut,sel=instruction[15],out=instructMux);
-    Not(in=instruction[15],out=instructCode);
-    And(a=instruction[15],b=instruction[5],out=saveARegister);
-    Or(a=instructCode,b=saveARegister,out=loadAregister);
-    ARegister(in=instructMux,load=loadAregister,out=ARegisterOut,out[0..14]=addressM,out=pcIn);
 
-    Mux16(a=false,b=instruction,sel=instruction[15],out=ins);
-
-    Mux16(a=ARegisterOut,b=inM,sel=instruction[12],out=aluIn);
-
-    DRegister(in=aluOut,load=instruction[4],out=DRegisterOut);
-
-    ALU(x=DRegisterOut,y=aluIn,zx=instruction[11],nx=instruction[10],zy=instruction[9],ny=instruction[8],f=instruction[7],no=instruction[6],out=aluOut,zr=zr,ng=ng);
-
-    Mux16(a=false,b=aluOut,sel=isWrite,out=outM);
-
-    And(a=instruction[3],b=instruction[15],out=writeM, out=isWrite);
-
-    Or16(a=aluOut,b=false,out[0..7]=leftData,out[8..15]=rightData);
-    Or8Way(in=leftData,out=leftSum);
-    Or8Way(in=rightData,out=rightSum);
-    Or(a=leftSum,b=rightSum,out=sum);
-
-    Not16(in=aluOut,out[15]=isPositive);
-    And(a=isPositive,b=sum,out=positive);
+    //ARegister
+    Not(in=instruction[15],out=isAinstruct);
+    Mux16(a=instruction,b=outALU,sel=instruction[15],out=inA);
+    And(a=instruction[15],b=instruction[5],out=destA);
+    Or(a=isAinstruct,b=destA,out=loadA);
+    ARegister(in=inA,load=loadA,out=outA,out[0..14]=addressM);
     
-    Not(in=sum,out=isZero);
+    
+    //DRegister
+    And(a=instruction[15],b=instruction[4],out=loadD);
+    DRegister(in=outALU,load=loadD,out=outD);
 
-    Or(a=positive,b=isZero,out=positiveAndZero);
+    //Select RAM[A] or ARegister
+    Mux16(a=outA,b=inM,sel=instruction[12],out=AorM);
 
-    Or16(a=aluOut,b=false,out[15]=isNegative);
+    //ALU
+    ALU(x=outD,y=AorM,zx=instruction[11],nx=instruction[10],zy=instruction[9],ny=instruction[8],f=instruction[7],no=instruction[6],out=outALU,out=outM,zr=zr,ng=ng);
 
-    Or16(a[15]=sum,b=aluOut,out[15]=negativeAndZero);
+    //Is write RAM
+    And(a=instruction[3],b=instruction[15],out=writeM);
 
-
-    Mux8Way16(a[0]=false,b[0]=positive,c[0]=isZero,d[0]=positiveAndZero,e[0]=isNegative,f[0]=sum,g[0]=negativeAndZero,h[0]=true,sel=instruction[0..2],out[0]=jump);
-    And16(a[15]=jump,b=aluOut,out[15]=isJump);
-    Or(a=isJump,b=reset,out=jumpAndReset);
-    Not(in=jumpAndReset,out=inc);
-
-    PC(in=ARegisterOut,load=isJump,inc=inc,reset=reset,out[0..14]=pc);
+    //PC
+    Not(in=zr,out=JNE); // != 0
+    Not(in=ng,out=JGE); // >= 0
+    And(a=JNE,b=JGE,out=JGT); // > 0
+    Or(a=ng,b=zr,out=JLE); // <= 0
+    Mux8Way16(a[0]=false,b[0]=JGT,c[0]=zr,d[0]=JGE,e[0]=ng,f[0]=JNE,g[0]=JLE,h[0]=true,sel=instruction[0..2],out[0]=jump);
+    And(a=jump,b=instruction[15],out=loadPC);
+    PC(in=outA,load=loadPC,inc=true,reset=reset,out[0..14]=pc);
 }
